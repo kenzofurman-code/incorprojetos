@@ -1,4 +1,4 @@
-import { Bell, CalendarDays, ClipboardCheck, FileStack, Home, LogOut, Printer, QrCode, Settings, ShieldCheck } from 'lucide-react';
+import { Bell, CalendarDays, ClipboardCheck, FileStack, Home, Layers3, LogOut, Printer, QrCode, Settings, ShieldCheck } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../features/auth/auth-context';
 import { repository } from '../../lib/repository';
@@ -8,6 +8,7 @@ const links = [
   { to: '/documentos', label: 'Documentos', icon: FileStack },
   { to: '/aprovacoes', label: 'Aprovações', icon: ClipboardCheck },
   { to: '/cronograma', label: 'Cronograma', icon: CalendarDays },
+  { to: '/comparacao', label: 'Compatibilização', icon: Layers3 },
   { to: '/obra', label: 'Obra', icon: QrCode },
   { to: '/impressos', label: 'Impressos', icon: Printer },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },

@@ -26,11 +26,12 @@ export function ComparisonPage() {
   const { documentId } = useParams();
   const { state, loading: dataLoading, error: dataError } = useAppData();
   const revisions = useMemo(
-    () => (state?.revisions.filter((revision) => revision.documentId === documentId && revision.fileUrl) ?? [])
+    () => (state?.revisions.filter((revision) => (!documentId || revision.documentId === documentId) && revision.fileUrl) ?? [])
       .sort((first, second) => first.uploadedAt.localeCompare(second.uploadedAt)),
     [documentId, state],
   );
   const documentRecord = state?.documents.find((item) => item.id === documentId);
+  const contextualComparison = Boolean(documentId);
   const [firstId, setFirstId] = useState('');
   const [secondId, setSecondId] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
@@ -55,6 +56,15 @@ export function ComparisonPage() {
 
   const firstRevision = revisions.find((revision) => revision.id === firstId);
   const secondRevision = revisions.find((revision) => revision.id === secondId);
+  const firstDocument = state?.documents.find((item) => item.id === firstRevision?.documentId);
+  const secondDocument = state?.documents.find((item) => item.id === secondRevision?.documentId);
+
+  function revisionLabel(revision: (typeof revisions)[number]): string {
+    const owner = state?.documents.find((item) => item.id === revision.documentId);
+    return owner
+      ? `${owner.disciplineCode} · ${owner.code} · ${revision.revisionCode}`
+      : `${revision.revisionCode} · ${revision.fileName}`;
+  }
 
   useEffect(() => {
     if (!firstRevision?.fileUrl || !secondRevision?.fileUrl) return;
@@ -95,31 +105,42 @@ export function ComparisonPage() {
 
   if (dataLoading) return <p className="text-sm text-slate-500">Carregando comparação...</p>;
   if (dataError) return <EmptyState title="Erro ao carregar" description={dataError} />;
-  if (!state || !documentRecord) return <EmptyState title="Documento não encontrado" description="Volte para a lista de documentos." />;
+  if (!state || (contextualComparison && !documentRecord)) return <EmptyState title="Documento não encontrado" description="Volte para a lista de documentos." />;
   if (revisions.length < 2) {
-    return <EmptyState title="São necessárias duas revisões" description="Envie pelo menos dois PDFs neste documento para utilizar a comparação." />;
+    return (
+      <EmptyState
+        title="São necessários dois PDFs"
+        description={contextualComparison ? 'Envie pelo menos duas revisões neste documento.' : 'Cadastre pelo menos dois documentos ou revisões para utilizar a compatibilização.'}
+      />
+    );
   }
 
   return (
     <div className="grid gap-6">
       <div>
-        <Link className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900" to={`/documentos/${documentRecord.id}`}>
-          <ArrowLeft size={16} /> Voltar ao documento
-        </Link>
-        <h2 className="text-3xl font-black tracking-tight">Comparar revisões</h2>
-        <p className="text-slate-500">{documentRecord.code} · sobreposição e análise visual de alterações.</p>
+        {documentRecord && (
+          <Link className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900" to={`/documentos/${documentRecord.id}`}>
+            <ArrowLeft size={16} /> Voltar ao documento
+          </Link>
+        )}
+        <h2 className="text-3xl font-black tracking-tight">{contextualComparison ? 'Comparar revisões' : 'Compatibilização de projetos'}</h2>
+        <p className="text-slate-500">
+          {documentRecord
+            ? `${documentRecord.code} · sobreposição e análise visual de alterações.`
+            : 'Compare revisões ou sobreponha projetos de disciplinas diferentes.'}
+        </p>
       </div>
 
       <Card>
         <CardContent className="grid gap-4 xl:grid-cols-4">
           <Field label="Revisão base">
             <Select value={firstId} onChange={(event) => { setFirstId(event.target.value); setPageNumber(1); }}>
-              {revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.revisionCode} · {revision.fileName}</option>)}
+              {revisions.map((revision) => <option key={revision.id} value={revision.id}>{revisionLabel(revision)}</option>)}
             </Select>
           </Field>
           <Field label="Revisão comparada">
             <Select value={secondId} onChange={(event) => { setSecondId(event.target.value); setPageNumber(1); }}>
-              {revisions.map((revision) => <option key={revision.id} value={revision.id}>{revision.revisionCode} · {revision.fileName}</option>)}
+              {revisions.map((revision) => <option key={revision.id} value={revision.id}>{revisionLabel(revision)}</option>)}
             </Select>
           </Field>
           <Field label="Modo">
@@ -176,7 +197,11 @@ export function ComparisonPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <h3 className="font-bold">Área de comparação</h3>
-            <p className="text-sm text-slate-500">{rendering ? 'Renderizando páginas...' : `${firstRevision?.revisionCode} × ${secondRevision?.revisionCode}`}</p>
+            <p className="text-sm text-slate-500">
+              {rendering
+                ? 'Renderizando páginas...'
+                : `${firstDocument?.disciplineCode ?? ''} ${firstRevision?.revisionCode} × ${secondDocument?.disciplineCode ?? ''} ${secondRevision?.revisionCode}`}
+            </p>
           </div>
           <Layers3 className="text-slate-400" />
         </CardHeader>

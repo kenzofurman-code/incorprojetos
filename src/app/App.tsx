@@ -27,6 +27,7 @@ export function App() {
           <Route path="/documentos" element={<DocumentsPage />} />
           <Route path="/documentos/:documentId" element={<DocumentDetailPage />} />
           <Route path="/documentos/:documentId/comparar" element={<ComparisonPage />} />
+          <Route path="/comparacao" element={<ComparisonPage />} />
           <Route path="/aprovacoes" element={<ApprovalPage />} />
           <Route path="/obra" element={<SitePage />} />
           <Route path="/cronograma" element={<SchedulePage />} />
