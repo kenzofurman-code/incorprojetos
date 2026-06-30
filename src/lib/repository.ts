@@ -9,8 +9,8 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { db, firebaseEnabled, storage } from '../firebase/config';
+import { auth, db, firebaseEnabled } from '../firebase/config';
+import { supabase, supabaseEnabled } from '../supabase/config';
 import type {
   AppState,
   Discipline,
@@ -51,11 +51,48 @@ function activeProjectId(): string {
 }
 
 async function uploadFile(projectId: string, documentId: string, revisionCode: string, file: File): Promise<{ url: string; path?: string }> {
-  if (firebaseEnabled && storage) {
-    const path = `projects/${projectId}/documents/${documentId}/${revisionCode}-${Date.now()}-${file.name}`;
-    const fileRef = ref(storage, path);
-    await uploadBytes(fileRef, file, { contentType: file.type || 'application/pdf' });
-    return { url: await getDownloadURL(fileRef), path };
+  if (firebaseEnabled && supabaseEnabled && supabase && auth?.currentUser) {
+    if (file.type !== 'application/pdf' || file.size > 25 * 1024 * 1024) {
+      throw new Error('Envie um arquivo PDF de até 25 MB.');
+    }
+
+    const idToken = await auth.currentUser.getIdToken();
+    const authorizationResponse = await fetch('/api/upload-url', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        projectId,
+        documentId,
+        revisionCode,
+        fileName: file.name,
+        contentType: file.type,
+        size: file.size,
+      }),
+    });
+    const authorization = (await authorizationResponse.json()) as {
+      path?: string;
+      token?: string;
+      publicUrl?: string;
+      error?: string;
+    };
+    if (!authorizationResponse.ok || !authorization.path || !authorization.token || !authorization.publicUrl) {
+      throw new Error(authorization.error || 'Não foi possível autorizar o upload.');
+    }
+
+    const { error } = await supabase.storage
+      .from(import.meta.env.VITE_SUPABASE_BUCKET || 'project-files')
+      .uploadToSignedUrl(authorization.path, authorization.token, file, {
+        contentType: 'application/pdf',
+      });
+    if (error) throw new Error(`Falha no upload: ${error.message}`);
+    return { url: authorization.publicUrl, path: authorization.path };
+  }
+
+  if (firebaseEnabled) {
+    throw new Error('Supabase Storage não está configurado neste ambiente.');
   }
 
   return { url: await fileToDataUrl(file) };

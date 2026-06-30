@@ -138,3 +138,26 @@ git push -u origin main
 ## Observação importante
 
 A remoção de textos no processamento de PDF foi deixada como melhoria futura. Isso precisa ser tratado com mais cuidado porque alguns PDFs têm texto real, outros têm texto vetorizado, e outros são imagens rasterizadas. A abordagem mais segura é evoluir esse recurso em uma camada server-side, possivelmente com processamento por imagem.
+
+## Armazenamento de PDFs no Supabase
+
+O Firestore continua sendo usado para os dados e o Firebase Authentication para o login. Os PDFs são enviados ao Supabase Storage por uma URL temporária gerada pela função `/api/upload-url` na Vercel.
+
+1. Crie um projeto gratuito no Supabase.
+2. Em **Storage**, crie um bucket público chamado `project-files`.
+3. Defina no bucket o limite de 25 MB e permita somente `application/pdf`.
+4. Não crie políticas públicas de escrita. A função usa a chave `service_role` apenas no servidor.
+5. Na Vercel, adicione em **Production** e **Preview**:
+
+```env
+VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+VITE_SUPABASE_ANON_KEY=...
+VITE_SUPABASE_BUCKET=project-files
+SUPABASE_URL=https://SEU-PROJETO.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_BUCKET=project-files
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` é secreta. Nunca use o prefixo `VITE_` nela e nunca a salve no Git.
+
+Depois de cadastrar as variáveis, gere um novo deploy na Vercel. Para testar as funções da Vercel localmente, use `vercel dev`; `npm run dev` executa somente o frontend.
