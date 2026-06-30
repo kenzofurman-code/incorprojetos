@@ -1,5 +1,6 @@
-import { Bell, ClipboardCheck, FileStack, Home, Printer, QrCode, Settings, ShieldCheck } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { Bell, ClipboardCheck, FileStack, Home, LogOut, Printer, QrCode, Settings, ShieldCheck } from 'lucide-react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../features/auth/auth-context';
 import { repository } from '../../lib/repository';
 
 const links = [
@@ -12,6 +13,21 @@ const links = [
 ];
 
 export function AppShell() {
+  const { user, logout, isDemo } = useAuth();
+  const navigate = useNavigate();
+  const displayName = user?.displayName || (isDemo ? 'Coordenador Demo' : 'Usuário');
+  const initials = displayName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-72 border-r border-slate-200 bg-white lg:block">
@@ -61,10 +77,20 @@ export function AppShell() {
               <Bell size={18} />
             </button>
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold">Coordenador</p>
-              <p className="text-xs text-slate-500">coord.projetos@empresa.com</p>
+              <p className="text-sm font-semibold">{displayName}</p>
+              <p className="text-xs text-slate-500">{user?.email || 'Modo demonstração'}</p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">CP</div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-sm font-bold text-white">{initials}</div>
+            {!isDemo && (
+              <button
+                aria-label="Sair"
+                className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
+                onClick={() => void handleLogout()}
+                title="Sair"
+              >
+                <LogOut size={18} />
+              </button>
+            )}
           </div>
         </header>
         <main className="p-5 lg:p-8">

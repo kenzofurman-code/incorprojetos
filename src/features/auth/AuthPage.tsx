@@ -1,12 +1,61 @@
+import { FirebaseError } from 'firebase/app';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { ShieldCheck } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Field, Input } from '../../components/ui/Field';
+import { auth } from '../../firebase/config';
 import { repository } from '../../lib/repository';
+import { useAuth } from './auth-context';
+
+function authErrorMessage(error: unknown): string {
+  if (error instanceof FirebaseError) {
+    if (error.code === 'auth/invalid-credential') return 'E-mail ou senha inválidos.';
+    if (error.code === 'auth/too-many-requests') return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    if (error.code === 'auth/network-request-failed') return 'Não foi possível conectar ao Firebase.';
+  }
+  return 'Não foi possível entrar. Tente novamente.';
+}
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, loading, isDemo } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const destination = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/';
+
+  useEffect(() => {
+    if (!loading && user) navigate(destination, { replace: true });
+  }, [destination, loading, navigate, user]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    if (isDemo) {
+      navigate(destination, { replace: true });
+      return;
+    }
+    if (!auth) {
+      setError('Firebase não está configurado neste ambiente.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      navigate(destination, { replace: true });
+    } catch (err) {
+      setError(authErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <main className="grid min-h-screen place-items-center bg-slate-950 p-6">
@@ -22,20 +71,30 @@ export function AuthPage() {
             </div>
           </div>
 
-          <div className="grid gap-4">
+          <form className="grid gap-4" onSubmit={handleSubmit}>
             <Field label="E-mail">
-              <Input defaultValue="coordenador@demo.com" type="email" />
+              <Input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
             </Field>
             <Field label="Senha">
-              <Input defaultValue="demo1234" type="password" />
+              <Input
+                autoComplete="current-password"
+                minLength={6}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                type="password"
+                value={password}
+              />
             </Field>
-            <Button onClick={() => navigate('/')}>Entrar no protótipo</Button>
+            {error && <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+            <Button disabled={submitting || loading} type="submit">
+              {submitting ? 'Entrando...' : isDemo ? 'Entrar no protótipo' : 'Entrar'}
+            </Button>
             <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
               {repository.mode === 'firebase'
-                ? 'Firebase detectado. Esta tela está pronta para receber autenticação real.'
-                : 'Sem .env.local configurado: o app roda em modo demo com dados no navegador.'}
+                ? 'Acesso protegido pelo Firebase Authentication.'
+                : 'Sem Firebase configurado: o app roda em modo demo com dados no navegador.'}
             </p>
-          </div>
+          </form>
         </CardContent>
       </Card>
     </main>
