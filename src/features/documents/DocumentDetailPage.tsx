@@ -1,5 +1,5 @@
 import { ArrowLeft, Check, ExternalLink, Flag, Layers3, Plus, X } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { useAppData } from '../../app/useAppData';
 import { Badge } from '../../components/ui/Badge';
@@ -15,6 +15,7 @@ import { CreateIssueForm } from './CreateIssueForm';
 
 export function DocumentDetailPage() {
   const { documentId } = useParams();
+  const navigate = useNavigate();
   const { state, loading, error, reload } = useAppData();
   const [showAddRevision, setShowAddRevision] = useState(false);
   const [showIssueForm, setShowIssueForm] = useState(false);
@@ -47,6 +48,11 @@ export function DocumentDetailPage() {
           <p className="text-slate-500">{documentRecord.title}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {revisions.filter((revision) => revision.fileUrl).length >= 2 && (
+            <Button variant="secondary" onClick={() => navigate(`/documentos/${documentRecord?.id}/comparar`)}>
+              <Layers3 size={18} /> Comparar revisões
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => setShowAddRevision((value) => !value)}>
             <Plus size={18} /> Nova revisão
           </Button>
