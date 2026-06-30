@@ -58,6 +58,7 @@ export interface DocumentRecord {
   area?: string;
   currentRevisionId?: string;
   latestApprovedRevisionId?: string;
+  latestReleasedRevisionId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +108,7 @@ export interface PrintRequest {
   printedBy?: string;
   deliveredTo?: string;
   location?: string;
+  copies?: number;
   status: 'solicitado' | 'impresso' | 'entregue' | 'obsoleto';
   createdAt: string;
   printedAt?: string;

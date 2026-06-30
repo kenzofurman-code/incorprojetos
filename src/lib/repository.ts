@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -130,6 +129,13 @@ async function listCollectionByProject<T>(name: string, projectId: string): Prom
   if (!firebaseEnabled || !db) return [];
   const snap = await getDocs(query(collection(db, name), where('projectId', '==', projectId)));
   return snap.docs.map((item) => ({ id: item.id, ...item.data() }) as T);
+}
+
+async function updatePrintRequestDocument(id: string, data: Partial<PrintRequest>): Promise<void> {
+  if (!db) return;
+  const matches = await getDocs(query(collection(db, 'printRequests'), where('id', '==', id)));
+  const target = matches.docs[0]?.ref ?? doc(db, 'printRequests', id);
+  await updateDoc(target, data);
 }
 
 export const repository = {
@@ -373,23 +379,40 @@ export const repository = {
 
     if (status === 'liberado_obra') {
       revisionUpdate.releasedForSiteAt = now;
+      documentUpdate.latestReleasedRevisionId = revisionId;
     }
 
     if (status === 'obsoleto') {
       revisionUpdate.obsoleteAt = now;
     }
 
+    const obsoleteRevisions = status === 'liberado_obra'
+      ? state.revisions.filter((item) => item.documentId === documentRecord.id && item.id !== revisionId && item.status === 'liberado_obra')
+      : [];
+    const obsoletePrintRequests = status === 'liberado_obra'
+      ? state.printRequests.filter((item) => item.documentId === documentRecord.id && item.revisionId !== revisionId && item.status !== 'obsoleto')
+      : [];
+
     if (firebaseEnabled && db) {
       await Promise.all([
         updateDoc(doc(db, 'revisions', revisionId), revisionUpdate),
         updateDoc(doc(db, 'documents', documentRecord.id), documentUpdate),
+        ...obsoleteRevisions.map((item) => updateDoc(doc(db!, 'revisions', item.id), { status: 'obsoleto', obsoleteAt: now })),
+        ...obsoletePrintRequests.map((item) => updatePrintRequestDocument(item.id, { status: 'obsoleto' })),
       ]);
       return;
     }
 
     const localState = getLocalState();
-    localState.revisions = localState.revisions.map((item) => (item.id === revisionId ? { ...item, ...revisionUpdate } : item));
+    localState.revisions = localState.revisions.map((item) => {
+      if (item.id === revisionId) return { ...item, ...revisionUpdate };
+      if (obsoleteRevisions.some((obsolete) => obsolete.id === item.id)) return { ...item, status: 'obsoleto', obsoleteAt: now };
+      return item;
+    });
     localState.documents = localState.documents.map((item) => (item.id === documentRecord.id ? { ...item, ...documentUpdate } : item));
+    localState.printRequests = localState.printRequests.map((item) =>
+      obsoletePrintRequests.some((obsolete) => obsolete.id === item.id) ? { ...item, status: 'obsoleto' } : item,
+    );
     saveLocalState(localState);
   },
 
@@ -418,12 +441,35 @@ export const repository = {
   async createPrintRequest(input: Omit<PrintRequest, 'id' | 'createdAt' | 'status'>): Promise<PrintRequest> {
     const request: PrintRequest = { ...input, id: makeId('print'), createdAt: new Date().toISOString(), status: 'solicitado' };
     if (firebaseEnabled && db) {
-      await addDoc(collection(db, 'printRequests'), request);
+      await setDoc(doc(db, 'printRequests', request.id), request);
       return request;
     }
     const state = getLocalState();
     state.printRequests.push(request);
     saveLocalState(state);
     return request;
+  },
+
+  async updatePrintRequest(
+    id: string,
+    input: Pick<PrintRequest, 'status'> & Partial<Pick<PrintRequest, 'printedBy' | 'deliveredTo' | 'location'>>,
+  ): Promise<void> {
+    const state = await this.loadAppState();
+    const current = state.printRequests.find((item) => item.id === id);
+    if (!current) throw new Error('Solicitação de impressão não encontrada.');
+    const now = new Date().toISOString();
+    const update: Partial<PrintRequest> = { ...input };
+    if (input.status === 'impresso') update.printedAt = current.printedAt ?? now;
+    if (input.status === 'entregue') {
+      update.printedAt = current.printedAt ?? now;
+      update.deliveredAt = now;
+    }
+    if (firebaseEnabled && db) {
+      await updatePrintRequestDocument(id, update);
+      return;
+    }
+    const localState = getLocalState();
+    localState.printRequests = localState.printRequests.map((item) => (item.id === id ? { ...item, ...update } : item));
+    saveLocalState(localState);
   },
 };

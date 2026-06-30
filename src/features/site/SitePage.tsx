@@ -1,7 +1,7 @@
 import QRCode from 'qrcode';
 import { useEffect, useMemo, useState } from 'react';
 import { Building2, CheckCircle2, QrCode, ScanLine, TriangleAlert } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAppData } from '../../app/useAppData';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -10,6 +10,16 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { Field, Input } from '../../components/ui/Field';
 import { revisionBadgeClass } from '../../lib/status';
 import { revisionStatusLabel } from '../../types/models';
+import { QrScanner } from './QrScanner';
+
+function qrPayload(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.searchParams.get('qr') ?? value;
+  } catch {
+    return value;
+  }
+}
 
 function QrPreview({ value }: { value: string }) {
   const [src, setSrc] = useState('');
@@ -30,13 +40,20 @@ function QrPreview({ value }: { value: string }) {
 
 export function SitePage() {
   const { state, loading, error } = useAppData();
-  const [qrInput, setQrInput] = useState('');
+  const [searchParams] = useSearchParams();
+  const [qrInput, setQrInput] = useState(() => qrPayload(searchParams.get('qr') ?? ''));
 
   const approvedItems = useMemo(() => {
     if (!state) return [];
     return state.documents
       .map((documentRecord) => {
-        const revision = state.revisions.find((item) => item.id === documentRecord.latestApprovedRevisionId || item.id === documentRecord.currentRevisionId);
+        const releasedRevisions = state.revisions
+          .filter((item) => item.documentId === documentRecord.id && item.status === 'liberado_obra')
+          .sort((first, second) => (second.releasedForSiteAt ?? second.uploadedAt).localeCompare(first.releasedForSiteAt ?? first.uploadedAt));
+        const revision =
+          releasedRevisions.find((item) => item.id === documentRecord.latestReleasedRevisionId) ??
+          releasedRevisions.find((item) => item.id === documentRecord.latestApprovedRevisionId) ??
+          releasedRevisions[0];
         if (!revision || revision.status !== 'liberado_obra') return null;
         return { documentRecord, revision };
       })
@@ -51,14 +68,17 @@ export function SitePage() {
     discipline,
     docs: approvedItems.filter((item) => item.documentRecord.disciplineCode === discipline.code),
   }));
+  const floors = [...new Set(approvedItems.map((item) => item.documentRecord.floor?.trim()).filter(Boolean) as string[])]
+    .sort((first, second) => second.localeCompare(first, 'pt-BR', { numeric: true }));
 
   const qrResult = (() => {
-    const [documentId, revisionId] = qrInput.split(':');
+    const [documentId, revisionId] = qrPayload(qrInput).split(':');
     if (!documentId || !revisionId) return null;
     const documentRecord = state.documents.find((item) => item.id === documentId);
     const revision = state.revisions.find((item) => item.id === revisionId);
     if (!documentRecord || !revision) return { ok: false, title: 'QR não encontrado', message: 'O documento ou a revisão não existem nesta base.' };
-    if (documentRecord.latestApprovedRevisionId === revision.id && revision.status === 'liberado_obra') {
+    const currentReleased = approvedItems.find((item) => item.documentRecord.id === documentRecord.id)?.revision;
+    if (currentReleased?.id === revision.id && revision.status === 'liberado_obra') {
       return { ok: true, title: 'Prancha atualizada', message: `${documentRecord.code} · ${revision.revisionCode} está liberado para obra.` };
     }
     return { ok: false, title: 'Prancha obsoleta ou não liberada', message: `Existe uma versão vigente diferente para ${documentRecord.code}.` };
@@ -115,6 +135,7 @@ export function SitePage() {
             <Field label="Código lido da prancha">
               <Input value={qrInput} onChange={(event) => setQrInput(event.target.value)} placeholder="doc_xxx:rev_xxx" />
             </Field>
+            <QrScanner onDetected={(value) => setQrInput(qrPayload(value))} />
             {qrResult ? (
               <div className={`rounded-2xl border p-4 ${qrResult.ok ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-rose-50 text-rose-900'}`}>
                 <div className="flex items-center gap-2 font-bold">
@@ -143,7 +164,7 @@ export function SitePage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-3">
-            {['Cobertura', '25', '24', '23', '22', '21', '20', '19', '18', 'Térreo', 'SS1', 'SS2'].map((floor) => {
+            {floors.map((floor) => {
               const floorDocs = approvedItems.filter((item) => item.documentRecord.floor === floor || item.documentRecord.floor === floor.padStart(2, '0'));
               return (
                 <div key={floor} className="grid gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[120px_1fr] md:items-center">
@@ -162,6 +183,7 @@ export function SitePage() {
                 </div>
               );
             })}
+            {floors.length === 0 && <EmptyState title="Nenhum pavimento disponível" description="Os pavimentos aparecem quando documentos liberados possuem esse campo preenchido." />}
           </div>
         </CardContent>
       </Card>
@@ -178,9 +200,10 @@ export function SitePage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {approvedItems.map(({ documentRecord, revision }) => {
                 const qrValue = `${documentRecord.id}:${revision.id}`;
+                const qrUrl = `${window.location.origin}/obra?qr=${encodeURIComponent(qrValue)}`;
                 return (
                   <div key={revision.id} className="flex gap-4 rounded-2xl border border-slate-200 p-4">
-                    <QrPreview value={qrValue} />
+                    <QrPreview value={qrUrl} />
                     <div className="min-w-0">
                       <div className="mb-2 flex items-center gap-2">
                         <QrCode size={18} />
