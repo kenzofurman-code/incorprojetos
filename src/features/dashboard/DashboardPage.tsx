@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useAppData } from '../../app/useAppData';
 import { formatDate } from '../../lib/dates';
+import { assessMilestone, milestonePriorityLabel, milestoneStatusLabel } from '../../lib/schedule';
 import { revisionStatusLabel } from '../../types/models';
 
 function MetricCard({ label, value, icon: Icon, helper }: { label: string; value: number | string; helper: string; icon: typeof FileStack }) {
@@ -35,7 +36,10 @@ export function DashboardPage() {
   const inReview = revisions.filter((revision) => revision.status === 'em_revisao').length;
   const openIssues = state.issues.filter((issue) => ['aberta', 'em_correcao'].includes(issue.status)).length;
   const printPending = state.printRequests.filter((request) => request.status === 'solicitado').length;
-  const riskyMilestones = state.milestones.filter((milestone) => ['risco', 'atrasado'].includes(milestone.status));
+  const assessedMilestones = state.milestones
+    .map((milestone) => ({ milestone, assessment: assessMilestone(milestone, docs, revisions) }))
+    .sort((first, second) => second.assessment.score - first.assessment.score);
+  const riskyMilestones = assessedMilestones.filter(({ assessment }) => ['risco', 'atrasado'].includes(assessment.status));
 
   const issuesByCategory = state.issues.reduce<Record<string, number>>((acc, issue) => {
     acc[issue.category] = (acc[issue.category] ?? 0) + 1;
@@ -74,18 +78,20 @@ export function DashboardPage() {
                     <th className="pb-3">Disciplina</th>
                     <th className="pb-3">Necessário para obra</th>
                     <th className="pb-3">Prometido projetista</th>
+                    <th className="pb-3">Prioridade</th>
                     <th className="pb-3">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {state.milestones.map((milestone) => (
+                  {assessedMilestones.map(({ milestone, assessment }) => (
                     <tr key={milestone.id}>
                       <td className="py-3 font-medium">{milestone.title}</td>
                       <td className="py-3">{milestone.disciplineCode}</td>
                       <td className="py-3">{formatDate(milestone.requiredForConstructionDate)}</td>
                       <td className="py-3">{formatDate(milestone.promisedByDesignerDate)}</td>
+                      <td className="py-3 font-semibold">{milestonePriorityLabel[assessment.priority]}</td>
                       <td className="py-3">
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{milestone.status.replace('_', ' ')}</span>
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{milestoneStatusLabel[assessment.status]}</span>
                       </td>
                     </tr>
                   ))}

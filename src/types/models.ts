@@ -43,6 +43,7 @@ export interface ScheduleMilestone {
   promisedByDesignerDate: string;
   responsibleCompany: string;
   status: 'no_prazo' | 'risco' | 'atrasado' | 'entregue';
+  documentIds?: string[];
 }
 
 export interface DocumentRecord {

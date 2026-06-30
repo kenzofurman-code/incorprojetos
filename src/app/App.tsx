@@ -9,6 +9,7 @@ import { DocumentsPage } from '../features/documents/DocumentsPage';
 import { PrintControlPage } from '../features/print-control/PrintControlPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { SitePage } from '../features/site/SitePage';
+import { SchedulePage } from '../features/schedule/SchedulePage';
 
 export function App() {
   return (
@@ -21,6 +22,7 @@ export function App() {
           <Route path="/documentos/:documentId" element={<DocumentDetailPage />} />
           <Route path="/aprovacoes" element={<ApprovalPage />} />
           <Route path="/obra" element={<SitePage />} />
+          <Route path="/cronograma" element={<SchedulePage />} />
           <Route path="/impressos" element={<PrintControlPage />} />
           <Route path="/configuracoes" element={<SettingsPage />} />
         </Route>

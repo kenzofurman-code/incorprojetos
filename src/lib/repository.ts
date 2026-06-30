@@ -220,6 +220,40 @@ export const repository = {
     saveLocalState(state);
   },
 
+  async upsertMilestone(input: Omit<ScheduleMilestone, 'id' | 'status'> & { id?: string; status?: ScheduleMilestone['status'] }): Promise<ScheduleMilestone> {
+    const item: ScheduleMilestone = {
+      id: input.id ?? makeId('milestone'),
+      projectId: input.projectId,
+      title: input.title,
+      disciplineCode: input.disciplineCode,
+      requiredForConstructionDate: input.requiredForConstructionDate,
+      promisedByDesignerDate: input.promisedByDesignerDate,
+      responsibleCompany: input.responsibleCompany,
+      status: input.status ?? 'no_prazo',
+      documentIds: input.documentIds ?? [],
+    };
+    if (firebaseEnabled && db) {
+      await setDoc(doc(db, 'milestones', item.id), item);
+      return item;
+    }
+    const state = getLocalState();
+    const index = state.milestones.findIndex((milestone) => milestone.id === item.id);
+    if (index >= 0) state.milestones[index] = item;
+    else state.milestones.push(item);
+    saveLocalState(state);
+    return item;
+  },
+
+  async deleteMilestone(id: string): Promise<void> {
+    if (firebaseEnabled && db) {
+      await deleteDoc(doc(db, 'milestones', id));
+      return;
+    }
+    const state = getLocalState();
+    state.milestones = state.milestones.filter((item) => item.id !== id);
+    saveLocalState(state);
+  },
+
   async createDocumentWithRevision(input: {
     projectId?: string;
     code: string;
