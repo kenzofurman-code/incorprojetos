@@ -35,8 +35,32 @@ async function verifyFirebaseToken(token: string): Promise<boolean> {
 }
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
+  if (request.method === 'GET') {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const bucket = process.env.SUPABASE_BUCKET || 'project-files';
+    if (!supabaseUrl || !serviceRoleKey) {
+      return response.status(503).json({
+        configured: false,
+        error: 'SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY ausente.',
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.storage.getBucket(bucket);
+    return response.status(error ? 503 : 200).json({
+      configured: true,
+      bucket: data?.id || bucket,
+      reachable: !error,
+      public: data?.public ?? null,
+      error: error?.message,
+    });
+  }
+
   if (request.method !== 'POST') {
-    response.setHeader('Allow', 'POST');
+    response.setHeader('Allow', 'GET, POST');
     return response.status(405).json({ error: 'Método não permitido.' });
   }
 
@@ -87,7 +111,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
     return response.status(200).json({
       path,
-      token: data.token,
+      signedUrl: data.signedUrl,
       publicUrl: publicData.publicUrl,
     });
   } catch (error) {

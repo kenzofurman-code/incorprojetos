@@ -10,7 +10,6 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db, firebaseEnabled } from '../firebase/config';
-import { supabase, supabaseEnabled } from '../supabase/config';
 import type {
   AppState,
   Discipline,
@@ -64,7 +63,7 @@ function activeProjectId(): string {
 }
 
 async function uploadFile(projectId: string, documentId: string, revisionCode: string, file: File): Promise<{ url: string; path?: string }> {
-  if (firebaseEnabled && supabaseEnabled && supabase && auth?.currentUser) {
+  if (firebaseEnabled && auth?.currentUser) {
     if (file.type !== 'application/pdf' || file.size > 25 * 1024 * 1024) {
       throw new Error('Envie um arquivo PDF de até 25 MB.');
     }
@@ -91,29 +90,31 @@ async function uploadFile(projectId: string, documentId: string, revisionCode: s
     );
     const authorization = (await authorizationResponse.json().catch(() => null)) as {
       path?: string;
-      token?: string;
+      signedUrl?: string;
       publicUrl?: string;
       error?: string;
     } | null;
-    if (!authorizationResponse.ok || !authorization || !authorization.path || !authorization.token || !authorization.publicUrl) {
+    if (!authorizationResponse.ok || !authorization || !authorization.path || !authorization.signedUrl || !authorization.publicUrl) {
       throw new Error(authorization?.error || `Não foi possível autorizar o upload (HTTP ${authorizationResponse.status}).`);
     }
 
-    const { error } = await withTimeout(
-      supabase.storage
-        .from(import.meta.env.VITE_SUPABASE_BUCKET || 'project-files')
-        .uploadToSignedUrl(authorization.path, authorization.token, file, {
-          contentType: 'application/pdf',
-        }),
+    const uploadBody = new FormData();
+    uploadBody.append('cacheControl', '3600');
+    uploadBody.append('', file);
+    const uploadResponse = await withTimeout(
+      fetch(authorization.signedUrl, {
+        method: 'PUT',
+        headers: { 'x-upsert': 'false' },
+        body: uploadBody,
+      }),
       60_000,
       'O Supabase não respondeu ao upload em 60 segundos. Confira o bucket e as variáveis.',
     );
-    if (error) throw new Error(`Falha no upload: ${error.message}`);
+    if (!uploadResponse.ok) {
+      const details = await uploadResponse.text().catch(() => '');
+      throw new Error(`Falha no upload ao Supabase (HTTP ${uploadResponse.status})${details ? `: ${details}` : '.'}`);
+    }
     return { url: authorization.publicUrl, path: authorization.path };
-  }
-
-  if (firebaseEnabled) {
-    throw new Error('Supabase Storage não está configurado neste ambiente.');
   }
 
   return { url: await fileToDataUrl(file) };

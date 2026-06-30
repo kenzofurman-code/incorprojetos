@@ -150,9 +150,6 @@ O Firestore continua sendo usado para os dados e o Firebase Authentication para 
 5. Na Vercel, adicione em **Production** e **Preview**:
 
 ```env
-VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
-VITE_SUPABASE_ANON_KEY=...
-VITE_SUPABASE_BUCKET=project-files
 SUPABASE_URL=https://SEU-PROJETO.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=...
 SUPABASE_BUCKET=project-files
