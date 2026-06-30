@@ -28,6 +28,19 @@ import { seedState } from './seed';
 
 const LOCAL_KEY = 'incorprojetos:v1';
 
+async function withTimeout<T>(promise: Promise<T>, milliseconds: number, message: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), milliseconds);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 function cloneSeed(): AppState {
   return JSON.parse(JSON.stringify(seedState)) as AppState;
 }
@@ -56,37 +69,45 @@ async function uploadFile(projectId: string, documentId: string, revisionCode: s
       throw new Error('Envie um arquivo PDF de até 25 MB.');
     }
 
-    const idToken = await auth.currentUser.getIdToken();
-    const authorizationResponse = await fetch('/api/upload-url', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        projectId,
-        documentId,
-        revisionCode,
-        fileName: file.name,
-        contentType: file.type,
-        size: file.size,
+    const idToken = await withTimeout(auth.currentUser.getIdToken(), 15_000, 'A sessão demorou para responder. Entre novamente.');
+    const authorizationResponse = await withTimeout(
+      fetch('/api/upload-url', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          projectId,
+          documentId,
+          revisionCode,
+          fileName: file.name,
+          contentType: file.type,
+          size: file.size,
+        }),
       }),
-    });
-    const authorization = (await authorizationResponse.json()) as {
+      20_000,
+      'A Vercel não respondeu à autorização do upload. Verifique os logs da função /api/upload-url.',
+    );
+    const authorization = (await authorizationResponse.json().catch(() => null)) as {
       path?: string;
       token?: string;
       publicUrl?: string;
       error?: string;
-    };
-    if (!authorizationResponse.ok || !authorization.path || !authorization.token || !authorization.publicUrl) {
-      throw new Error(authorization.error || 'Não foi possível autorizar o upload.');
+    } | null;
+    if (!authorizationResponse.ok || !authorization || !authorization.path || !authorization.token || !authorization.publicUrl) {
+      throw new Error(authorization?.error || `Não foi possível autorizar o upload (HTTP ${authorizationResponse.status}).`);
     }
 
-    const { error } = await supabase.storage
-      .from(import.meta.env.VITE_SUPABASE_BUCKET || 'project-files')
-      .uploadToSignedUrl(authorization.path, authorization.token, file, {
-        contentType: 'application/pdf',
-      });
+    const { error } = await withTimeout(
+      supabase.storage
+        .from(import.meta.env.VITE_SUPABASE_BUCKET || 'project-files')
+        .uploadToSignedUrl(authorization.path, authorization.token, file, {
+          contentType: 'application/pdf',
+        }),
+      60_000,
+      'O Supabase não respondeu ao upload em 60 segundos. Confira o bucket e as variáveis.',
+    );
     if (error) throw new Error(`Falha no upload: ${error.message}`);
     return { url: authorization.publicUrl, path: authorization.path };
   }
